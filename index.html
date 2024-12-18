@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Map with Schedule Planner</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Add these to your existing styles */
+        #schedulerContent, #clusterContent, #locaterContent, #otherContent {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+
+        #clusterMap, #locaterMap, #otherMap {
+            height: 100vh;
+            width: 100vw;
+        }
+    
+        #map {
+            height: 100vh;
+            width: 100vw;
+            z-index: 0;
+        }
+
+        /* Side navigation menu */
+        #mySidenav a {
+            position: absolute;
+            left: -20px;
+            transition: 0.3s;
+            padding: 15px;
+            width: 100px;
+            text-decoration: none;
+            font-size: 16px;
+            color: white;
+            border-radius: 0 5px 5px 0;
+            z-index: 1001;
+        }
+
+        #mySidenav a:hover {
+            left: 0;
+        }
+
+        #Scheduler { top: 100px; background-color: red; }
+        #Cluster { top: 160px; background-color: green; }
+        #Locater { top: 220px; background-color: blue; }
+        #Other { top: 280px; background-color: purple; }
+        
+        #info-box {
+            position: absolute;
+            bottom: 20px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            font-size: 14px;
+            width: 200px;
+        }
+
+        /* Schedule panel */
+        #schedulePanel {
+            position: fixed;
+            top: 50%;
+            right: -320px;
+            transform: translateY(-50%);
+            width: 300px;
+            height: 60vh;
+            background-color: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            overflow: auto;
+            transition: right 0.3s ease-in-out;
+        }
+
+        #schedulePanel.visible {
+            right: 10px;
+        }
+
+        #togglePanel {
+            position: fixed;
+            top: 50%;
+            right: 0px;
+            transform: translateY(-100%);
+            z-index: 1001;
+            width: 40px;
+            height: 40px;
+            background-color: #949494;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+            transition: right 0.3s ease-in-out;
+        }
+
+        #togglePanel.visible {
+            right: -30px;
+            background-color: #808080;
+        }
+
+        .leaflet-control-layers {
+            top: 5px;
+            left: 10px;
+            margin: 0;
+            z-index: 1000;
+        }
+
+        #scheduleForm input, #scheduleForm button {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 5px;
+        }
+
+        #scheduleList {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #scheduleList li {
+            background-color: #f0f0f0;
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 3px;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .schedule-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .schedule-actions button {
+            padding: 2px 5px;
+            font-size: 12px;
+        }
+
+        .dragging {
+            opacity: 0.5;
+        }
+        
+        #export-btn {
+          width: 100%;
+          padding: 5px;
+          margin-top: 10px
+        }
+        
+        #loginOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        #loginForm {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        #loginForm input, #loginForm button {
+            margin: 10px 0;
+            padding: 5px;
+            width: 200px;
+            
+        .map-container {
+        height: 100vh;
+        width: 100vw;
+    }
+
+        #clusterContent, #locaterContent, #otherContent {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+    }
+        }
+
+        .map-controls {
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 5px;
+            padding: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .map-controls button {
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .map-controls button:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+    <script src="https://unpkg.com/leaflet-polylinedecorator/dist/leaflet.polylineDecorator.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+</head>
+<body>
+    <div id="loginOverlay">
+        <form id="loginForm">
+            <input type="password" id="password" placeholder="Enter password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+
+    <div id="mySidenav">
+        <a href="#" id="Scheduler">Scheduler</a>
+        <a href="#" id="Cluster">Cluster</a>
+        <a href="#" id="Locater">Locater</a>
+        <a href="#" id="Other">Other</a>
+    </div>
+
+    <div id="schedulerContent">
+        <div id="map"></div>
+        <div id="info-box">Click on a state to see details.</div>
+        <button id="togglePanel">📅</button>
+    </div>
+    
+    <div id="schedulePanel">
+        <h2>Schedule Planner</h2>
+        <form id="scheduleForm">
+            <div>
+                <label for="location">Location:</label>
+                <input type="text" id="location" name="location" readonly required>
+            </div>
+            <div>
+                <label for="latitude">Latitude:</label>
+                <input type="text" id="latitude" name="latitude" readonly required>
+            </div>
+            <div>
+                <label for="longitude">Longitude:</label>
+                <input type="text" id="longitude" name="longitude" readonly required>
+            </div>
+            <div>
+                <label for="event">Event:</label>
+                <input type="text" id="event" name="event" required>
+            </div>
+            <div>
+                <label for="date">Date:</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            <div>
+                <label for="startTime">Start Time:</label>
+                <input type="time" id="startTime" name="startTime" required>
+            </div>
+            <div>
+                <label for="endTime">End Time:</label>
+                <input type="time" id="endTime" name="endTime" required>
+            </div>
+            <div>
+                <button type="submit" id="submitBtn">Add Schedule</button>
+            </div>
+        </form>
+        <h3>Your Schedule</h3>
+        <ul id="scheduleList"></ul>
+        <div>
+            <button type="submit" id="export-btn">Export Schedule</button>
+        </div>
+    </div>
+    
+    <div id="clusterContent">
+        <div id="clusterMap"></div>
+    </div>
+
+    <div id="locaterContent">
+        <div id="locaterMap"></div>
+        <div class="map-controls" style="position: absolute; top: 10px; right: 10px; z-index: 1000;">
+            <button id="createDestBtn" style="margin: 5px; padding: 5px;">Create Destination Pin</button>
+            <button id="createMarkerBtn" style="margin: 5px; padding: 5px;">Create Marker Pin</button>
+            <div id="distanceInfo" style="background: white; padding: 10px; margin-top: 5px; border-radius: 5px;">
+                No distances calculated yet
+            </div>
+        </div>
+    </div>
+
+    <div id="otherContent">
+        <div id="otherMap"></div>
+    </div>
+
+    <script>
+        // Password protection
+        const correctPassword = "asdf"; // Set your desired password here
+        const loginOverlay = document.getElementById('loginOverlay');
+        const loginForm = document.getElementById('loginForm');
+
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const password = document.getElementById('password').value;
+            if (password === correctPassword) {
+                loginOverlay.style.display = 'none';
+            } else {
+                alert('Incorrect password. Please try again.');
+            }
+        });
+
+        // Tab switching functionality
+    const tabContents = {
+        'Scheduler': document.getElementById('schedulerContent'),
+        'Cluster': document.getElementById('clusterContent'),
+        'Locater': document.getElementById('locaterContent'),
+        'Other': document.getElementById('otherContent')
+    };
+
+    const maps = {
+        'Scheduler': null,
+        'Cluster': null,
+        'Locater': null,
+        'Other': null
+    };
+
+    function initializeMap(containerId) {
+        const newMap = L.map(containerId).setView([37.8, -96], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(newMap);
+        return newMap;
+    }
+
+    function switchTab(tabId) {
+        // Hide all content
+        Object.values(tabContents).forEach(content => {
+            if (content) {
+                content.style.display = 'none';
+            }
+        });
+
+        // Show selected content
+        const selectedContent = tabContents[tabId];
+        if (selectedContent) {
+            selectedContent.style.display = 'block';
+        }
+
+        // Initialize map if not already done
+        if (tabId !== 'Scheduler' && !maps[tabId]) {
+            const mapContainer = document.getElementById(tabId.toLowerCase() + 'Map');
+            if (mapContainer) {
+                maps[tabId] = initializeMap(tabId.toLowerCase() + 'Map');
+                
+                // Initialize specific tab functionality
+                if (tabId === 'Cluster') {
+                    initializeClusterTab();
+                } else if (tabId === 'Locater') {
+                    initializeLocaterTab();
+                } else if (tabId === 'Other') {
+                    initializeOtherTab();
+                }
+            }
+        }
+
+        // Handle the main scheduler map
+        if (tabId === 'Scheduler' && !maps.Scheduler) {
+            maps.Scheduler = map;
+        }
+
+        // Invalidate map size after showing content
+        if (maps[tabId]) {
+            setTimeout(() => {
+                maps[tabId].invalidateSize();
+            }, 100);
+        }
+    }
+
+    // Add click handlers to navigation items
+    document.querySelectorAll('#mySidenav a').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchTab(e.target.id);
+        });
+    });
+
+    // Show scheduler content by default
+    switchTab('Scheduler');
+    
+        var map = L.map('map').setView([37.8, -96], 4);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        var searchControl = L.Control.geocoder({
+            defaultMarkGeocode: false
+        })
+        .on('markgeocode', function(e) {
+            var bbox = e.geocode.bbox;
+            var poly = L.polygon([
+                bbox.getSouthEast(),
+                bbox.getNorthEast(),
+                bbox.getNorthWest(),
+                bbox.getSouthWest()
+            ]).addTo(map);
+            map.fitBounds(poly.getBounds());
+            addToHistory('add', poly);
+            poly.on('click', onPolygonClick);
+
+            const lat = e.geocode.center.lat;
+            const lng = e.geocode.center.lng;
+            getCityName(lat, lng);
+            openSchedulePanel(lat, lng);
+        })
+        .addTo(map);
+
+        var initialCenter = [37.8, -96];
+        var initialZoom = 4;
+
+        function style(feature) {
+            return {
+                fillColor: '#ffffff',
+                weight: 2,
+                opacity: 1,
+                color: 'black',
+                dashArray: '3',
+                fillOpacity: 0.7
+            };
+        }
+
+        function onEachFeature(feature, layer) {
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight,
+                click: onFeatureClick
+            });
+        }
+
+        function highlightFeature(e) {
+            var layer = e.target;
+            layer.setStyle({
+                weight: 5,
+                color: '#666',
+                dashArray: '',
+                fillOpacity: 0.7
+            });
+        }
+
+        function resetHighlight(e) {
+            geojson.resetStyle(e.target);
+        }
+
+        function onFeatureClick(e) {
+            var layer = e.target;
+            var properties = layer.feature.properties;
+            var infoBox = document.getElementById('info-box');
+            infoBox.innerHTML = `<strong>${properties.name || 'State'}</strong><br>${properties.description || 'No description available.'}`;
+            map.fitBounds(e.target.getBounds());
+        }
+
+        var geojson = L.geoJson(null, {
+            style: style,
+            onEachFeature: onEachFeature
+        }).addTo(map);
+
+        fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+            .then(response => response.json())
+            .then(data => {
+                geojson.addData(data);
+            });
+
+        var markerLayerGroup1 = L.layerGroup().addTo(map);
+        var markerLayerGroup2 = L.layerGroup().addTo(map);
+
+        var markersGroup1 = [
+            { lat: 41.8781, lng: -87.6298, popupText: 'Chicago' },
+            { lat: 33.7488, lng: -84.3877, popupText: 'Atlanta' }
+        ];
+        
+        var polygonCoordinates1 = [
+          [42.3601, -71.0589],
+          [40.7128, -74.0060],
+          [39.9526, -75.1652],
+          [38.9072, -77.0369]
+        ];
+        
+        var markersGroup2 = [
+            { lat: 47.6061, lng: -122.3328, popupText: 'Seattle' },
+            { lat: 39.7392, lng: -104.9903, popupText: 'Denver' }
+        ];
+
+        var polygonCoordinates2 = [
+          [37.7749, -122.4194],
+          [34.0522, -118.2437],
+          [32.7157, -117.1611]
+        ];
+        
+        markersGroup1.forEach(marker => {
+            L.marker([marker.lat, marker.lng]).bindPopup(marker.popupText).addTo(markerLayerGroup1);
+        });
+
+        markersGroup2.forEach(marker => {
+            L.marker([marker.lat, marker.lng]).bindPopup(marker.popupText).addTo(markerLayerGroup2);
+        });
+
+        var polygon1 = L.polygon(polygonCoordinates1, {
+          color: 'blue',
+          fillColor: '#0000FF',
+          fillOpacity: 0.5
+        }).bindPopup('Polygon in Layer 1').addTo(markerLayerGroup1);
+        
+        var polygon2 = L.polygon(polygonCoordinates2, {
+          color: 'red',
+          fillColor: '#FF0000',
+          fillOpacity: 0.5
+        }).bindPopup('Polygon in Layer 2').addTo(markerLayerGroup2);
+        
+        var baseMaps = {};
+        var overlayMaps = {
+            "Marker Layer 1": markerLayerGroup1,
+            "Marker Layer 2": markerLayerGroup2
+        };
+        L.control.layers(baseMaps, overlayMaps).addTo(map);
+
+        const schedulerRecenterButton = L.control({position: 'bottomleft'});
+        schedulerRecenterButton.onAdd = function() {
+            const div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
+            div.innerHTML = `
+                <button id="recenter-btn" title="Re-Center Map" style="
+                    width: 34px;
+                    height: 34px;
+                    background: white;
+                    border: 2px solid rgba(0,0,0,0.2);
+                    border-radius: 4px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+                    font-size: 16px;
+                ">⌖</button>
+            `;
+            div.querySelector('button').onclick = function(e) {
+                e.stopPropagation();
+                map.setView([37.8, -96], 4);
+            };
+            div.querySelector('button').onmouseover = function() {
+                this.style.background = '#f4f4f4';
+            };
+            div.querySelector('button').onmouseout = function() {
+                this.style.background = 'white';
+            };
+            return div;
+        };
+        schedulerRecenterButton.addTo(map);
+
+        var historyStack = [];
+        function addToHistory(action, item) {
+            historyStack.push({ action: action, item: item });
+        }
+
+        function onPolygonClick(e) {
+            var poly = e.target;
+            map.removeLayer(poly);
+            addToHistory('remove', poly);
+        }
+
+        function undoAction() {
+            var lastAction = historyStack.pop();
+            if (lastAction.action === 'add') {
+                map.removeLayer(lastAction.item);
+            } else if (lastAction.action === 'remove') {
+                map.addLayer(lastAction.item);
+            }
+        }
+
+        function redoAction() {
+            // Implementation for redo can be added here based on requirements
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'z') {
+                undoAction();
+            } else if (e.ctrlKey && e.shiftKey && e.key === 'Z') {
+                redoAction();
+            }
+        });
+        
+        const schedulePanel = document.getElementById('schedulePanel');
+        const toggleButton = document.getElementById('togglePanel');
+        const scheduleForm = document.getElementById('scheduleForm');
+        const scheduleList = document.getElementById('scheduleList');
+        const locationInput = document.getElementById('location');
+        const submitBtn = document.getElementById('submitBtn');
+
+        toggleButton.addEventListener('click', () => {
+            schedulePanel.classList.toggle('visible');
+            toggleButton.classList.toggle('visible');
+        });
+
+        function getCityName(lat, lng) {
+            const geocodeUrl = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
+
+            fetch(geocodeUrl)
+                .then(response => response.json())
+                .then(data => {
+                    const address = data.address;
+                    const city = address.city || address.town || address.village || address.state || 'Unknown location';
+                    locationInput.value = city;
+                    document.getElementById('latitude').value = lat;
+                    document.getElementById('longitude').value = lng;
+                })
+                .catch(error => {
+                    console.error('Error fetching city name:', error);
+                    locationInput.value = 'Error retrieving location';
+                });
+        }
+
+        let currentMarker = null;
+
+        map.on('click', function(e) {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+
+            // Remove the previous marker if it exists
+            if (currentMarker) {
+                map.removeLayer(currentMarker);
+            }
+
+            // Add a new marker at the clicked location
+            currentMarker = L.marker([lat, lng]).addTo(map);
+
+            getCityName(lat, lng);
+            openSchedulePanel(lat, lng);
+        });
+
+        function openSchedulePanel(lat, lng) {
+            schedulePanel.classList.add('visible');
+            toggleButton.classList.add('visible');
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lng;
+        }
+
+        let scheduleItems = [];
+        let polylines = [];
+        let editingItem = null;
+
+        scheduleForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const location = locationInput.value;
+            const event = document.getElementById('event').value;
+            const date = document.getElementById('date').value;
+            const startTime = document.getElementById('startTime').value;
+            const endTime = document.getElementById('endTime').value;
+            const lat = parseFloat(document.getElementById('latitude').value);
+            const lng = parseFloat(document.getElementById('longitude').value);
+
+            if (editingItem) {
+                updateScheduleItem(editingItem, location, event, date, startTime, endTime, lat, lng);
+                editingItem = null;
+                submitBtn.textContent = 'Add Schedule';
+            } else {
+                addScheduleItem(location, event, date, startTime, endTime, lat, lng);
+            }
+
+            scheduleForm.reset();
+        });
+
+        function addScheduleItem(location, event, date, startTime, endTime, lat, lng) {
+            const listItem = document.createElement('li');
+            listItem.draggable = true;
+            listItem.innerHTML = `
+                <span>${event} at ${location} on ${date} from ${startTime} to ${endTime}</span>
+                <div class="schedule-actions">
+                    <button class="edit-btn">Edit</button>
+                    <button class="delete-btn">Delete</button>
+                </div>
+            `;
+            scheduleList.appendChild(listItem);
+
+            const marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup(`${event} on ${date} from ${startTime} to ${endTime}`)
+                .openPopup();
+
+            const scheduleItem = { listItem, marker, lat, lng, event, date, startTime, endTime, location };
+            scheduleItems.push(scheduleItem);
+
+            drawArrows();
+
+            listItem.addEventListener('dragstart', dragStart);
+            listItem.addEventListener('dragover', dragOver);
+            listItem.addEventListener('drop', drop);
+            listItem.addEventListener('dragend', dragEnd);
+
+            const editBtn = listItem.querySelector('.edit-btn');
+            const deleteBtn = listItem.querySelector('.delete-btn');
+
+            editBtn.addEventListener('click', () => editScheduleItem(scheduleItem));
+            deleteBtn.addEventListener('click', () => deleteScheduleItem(scheduleItem));
+        }
+
+        function editScheduleItem(scheduleItem) {
+            editingItem = scheduleItem;
+            
+            document.getElementById('event').value = scheduleItem.event;
+            locationInput.value = scheduleItem.location;
+            document.getElementById('date').value = scheduleItem.date;
+            document.getElementById('startTime').value = scheduleItem.startTime;
+            document.getElementById('endTime').value = scheduleItem.endTime;
+            document.getElementById('latitude').value = scheduleItem.lat;
+            document.getElementById('longitude').value = scheduleItem.lng;
+
+            submitBtn.textContent = 'Update Schedule';
+        }
+
+        function updateScheduleItem(scheduleItem, location, event, date, startTime, endTime, lat, lng) {
+            scheduleItem.listItem.querySelector('span').textContent = `${event} at ${location} on ${date} from ${startTime} to ${endTime}`;
+            scheduleItem.marker.setLatLng([lat, lng]);
+            scheduleItem.marker.setPopupContent(`${event} on ${date} from ${startTime} to ${endTime}`);
+            
+            Object.assign(scheduleItem, { lat, lng, event, date, startTime, endTime, location });
+
+            drawArrows();
+        }
+
+        function deleteScheduleItem(scheduleItem) {
+            scheduleList.removeChild(scheduleItem.listItem);
+            map.removeLayer(scheduleItem.marker);
+            scheduleItems = scheduleItems.filter(item => item !== scheduleItem);
+
+            drawArrows();
+        }
+
+        function dragStart(e) {
+            e.target.classList.add('dragging');
+        }
+
+        function dragOver(e) {
+            e.preventDefault();
+            const draggingItem = document.querySelector('.dragging');
+            const siblings = [...scheduleList.querySelectorAll('li:not(.dragging)')];
+            const nextSibling = siblings.find(sibling => {
+                return e.clientY <= sibling.offsetTop + sibling.offsetHeight / 2;
+            });
+            scheduleList.insertBefore(draggingItem, nextSibling);
+        }
+
+        function drop(e) {
+            e.preventDefault();
+        }
+
+        function dragEnd(e) {
+            e.target.classList.remove('dragging');
+            updateScheduleItemsOrder();
+            drawArrows();
+        }
+
+        function updateScheduleItemsOrder() {
+            const listItems = Array.from(scheduleList.children);
+            scheduleItems = listItems.map(listItem => 
+                scheduleItems.find(item => item.listItem === listItem)
+            );
+        }
+
+        function drawArrows() {
+            polylines.forEach(polyline => map.removeLayer(polyline));
+            polylines = [];
+
+            for (let i = 0; i < scheduleItems.length - 1; i++) {
+                const start = [scheduleItems[i].lat, scheduleItems[i].lng];
+                const end = [scheduleItems[i + 1].lat, scheduleItems[i + 1].lng];
+
+                const polyline = L.polyline([start, end], {
+                    color: 'red',
+                    weight: 3,
+                    opacity: 0.5,
+                    smoothFactor: 1
+                }).addTo(map);
+
+                const decorator = L.polylineDecorator(polyline, {
+                    patterns: [
+                        {offset: '100%', repeat: 0, symbol: L.Symbol.arrowHead({pixelSize: 15, polygon: false, pathOptions: {stroke: true, color: 'red'}})}
+                    ]
+                }).addTo(map);
+
+                polylines.push(polyline);
+                polylines.push(decorator);
+            }
+        }
+
+        function exportSchedule() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Add title
+            doc.setFontSize(18);
+            doc.text("Schedule", 105, 15, null, null, "center");
+            
+            // Add schedule items
+            doc.setFontSize(12);
+            let y = 30;
+            scheduleItems.forEach((item, index) => {
+                const text = `${index + 1}. ${item.event} at ${item.location} on ${item.date} from ${item.startTime} to ${item.endTime}`;
+                doc.text(text, 20, y);
+                y += 10;
+            });
+            
+            // Save the PDF
+            doc.save("schedule.pdf");
+        }
+        
+        // Add event listener to export button
+        document.getElementById('export-btn').addEventListener('click', exportSchedule);
+
+        let clusterMarkers = [];
+        let markerClusterGroup;
+
+        function initializeClusterTab() {
+            if (!maps.Cluster) return;
+            
+            // Set initial view with a wider zoom
+            maps.Cluster.setView([37.8, -96], 4);
+            
+            markerClusterGroup = L.markerClusterGroup({
+                maxClusterRadius: 1609.34,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: true,
+                zoomToBoundsOnClick: true,
+                disableClusteringAtZoom: 8,
+                spiderfyDistanceMultiplier: 2,
+                zoomToBoundsOnClick: function(e) {
+                    const cluster = e.layer;
+                    const bounds = cluster.getBounds();
+                    maps.Cluster.fitBounds(bounds, {
+                        padding: [50, 50],
+                        maxZoom: 12,
+                        animate: true
+                    });
+                }
+            });
+
+            maps.Cluster.on('click', function(e) {
+                const clickedDomElement = document.elementFromPoint(e.originalEvent.clientX, e.originalEvent.clientY);
+                if (clickedDomElement && (clickedDomElement.tagName === 'BUTTON' || 
+                    clickedDomElement.closest('button'))) {
+                    return;
+                }
+                addClusterMarker(e.latlng.lat, e.latlng.lng);
+            });
+
+            // Add recenter button with compass icon
+            const recenterButton = L.control({position: 'bottomleft'});
+            recenterButton.onAdd = function() {
+                const div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
+                div.innerHTML = `
+                    <button id="cluster-recenter-btn" title="Re-Center Map" style="
+                        width: 34px;
+                        height: 34px;
+                        background: white;
+                        border: 2px solid rgba(0,0,0,0.2);
+                        border-radius: 4px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+                        font-size: 16px;
+                    ">⌖</button>
+                `;
+                div.querySelector('button').onclick = function(e) {
+                    e.stopPropagation();
+                    recenterClusterMap();
+                };
+                div.querySelector('button').onmouseover = function() {
+                    this.style.background = '#f4f4f4';
+                };
+                div.querySelector('button').onmouseout = function() {
+                    this.style.background = 'white';
+                };
+                return div;
+            };
+            recenterButton.addTo(maps.Cluster);
+
+            // Add marker counter and clear button in a modernized control
+            const markerControl = L.control({position: 'bottomright'});
+            markerControl.onAdd = function() {
+                const div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
+                div.innerHTML = `
+                    <div style="
+                        background: white;
+                        padding: 6px 8px;
+                        border-radius: 4px;
+                        border: 2px solid rgba(0,0,0,0.2);
+                        box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+                        display: flex;
+                        gap: 10px;
+                        align-items: center;
+                    ">
+                        <span id="markerCount" style="
+                            font-size: 14px;
+                            color: #444;
+                            font-weight: 500;
+                        ">📍 0</span>
+                        <button id="clearMarkersBtn" style="
+                            border: none;
+                            background: #ff4444;
+                            color: white;
+                            padding: 4px 8px;
+                            border-radius: 3px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            transition: background-color 0.3s;
+                            display: flex;
+                            align-items: center;
+                            gap: 4px;
+                        ">
+                            <span style="font-size: 14px;">🗑️</span>
+                            Clear
+                        </button>
+                    </div>
+                `;
+                
+                div.querySelector('#clearMarkersBtn').onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clearClusterMarkers();
+                };
+                
+                div.querySelector('#clearMarkersBtn').onmouseover = function() {
+                    this.style.background = '#ff6666';
+                };
+                div.querySelector('#clearMarkersBtn').onmouseout = function() {
+                    this.style.background = '#ff4444';
+                };
+                
+                return div;
+            };
+            markerControl.addTo(maps.Cluster);
+
+            maps.Cluster.addLayer(markerClusterGroup);
+        }
+
+        // Update the updateMarkerCount function to use the pin emoji
+        function updateMarkerCount() {
+            const countElement = document.getElementById('markerCount');
+            if (countElement) {
+                countElement.innerHTML = `📍 ${clusterMarkers.length}`;
+            }
+        }
+
+        function addClusterMarker(lat, lng) {
+            const marker = L.marker([lat, lng], {
+                draggable: true
+            });
+            
+            // Add popup with coordinates and store marker index
+            const markerIndex = clusterMarkers.length; // Store index when creating marker
+            const popupContent = document.createElement('div');
+            const updatePopupContent = () => {
+                const position = marker.getLatLng();
+                popupContent.innerHTML = `
+                    <div>
+                        <p>Lat: ${position.lat.toFixed(6)}<br>Lng: ${position.lng.toFixed(6)}</p>
+                        <button onclick="deleteClusterMarker(${markerIndex})" 
+                                style="width: 100%; padding: 5px; margin-top: 5px; cursor: pointer;">
+                            Delete Marker
+                        </button>
+                    </div>
+                `;
+            };
+            updatePopupContent();
+            marker.bindPopup(popupContent);
+
+            // Store the index with the marker for reference
+            marker.markerIndex = markerIndex;
+
+            // Update popup content when marker is dragged
+            marker.on('dragend', function() {
+                updatePopupContent();
+                checkAndCreateClusters();
+            });
+
+            if (markerClusterGroup) {
+                markerClusterGroup.removeLayer(marker);
+            }
+
+            marker.addTo(maps.Cluster);
+            clusterMarkers.push(marker);
+            checkAndCreateClusters();
+            updateMarkerCount();
+            
+            // Adjust the fit bounds behavior
+            if (clusterMarkers.length > 1) {
+                const group = new L.featureGroup(clusterMarkers);
+                maps.Cluster.fitBounds(group.getBounds(), {
+                    padding: [50, 50],    // Add padding around the bounds
+                    maxZoom: 12,          // Limit maximum zoom level
+                    animate: true
+                });
+            }
+        }
+
+        function checkAndCreateClusters() {
+            clusterMarkers.forEach(marker => {
+                maps.Cluster.removeLayer(marker);
+                if (markerClusterGroup) {
+                    markerClusterGroup.removeLayer(marker);
+                }
+            });
+
+            if (markerClusterGroup) {
+                maps.Cluster.removeLayer(markerClusterGroup);
+            }
+            markerClusterGroup = L.markerClusterGroup({
+                maxClusterRadius: 1609.34,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: true,
+                zoomToBoundsOnClick: true,
+                disableClusteringAtZoom: 8,
+                spiderfyDistanceMultiplier: 2
+            });
+
+            clusterMarkers.forEach(marker => {
+                markerClusterGroup.addLayer(marker);
+            });
+
+            maps.Cluster.addLayer(markerClusterGroup);
+        }
+
+        function deleteClusterMarker(index) {
+            // Find the marker by its stored index
+            const markerToDelete = clusterMarkers.find(m => m.markerIndex === index);
+            if (markerToDelete) {
+                // Remove from map and cluster group
+                maps.Cluster.removeLayer(markerToDelete);
+                if (markerClusterGroup) {
+                    markerClusterGroup.removeLayer(markerToDelete);
+                }
+                
+                // Remove from array
+                clusterMarkers = clusterMarkers.filter(m => m !== markerToDelete);
+                
+                // Update clusters and count
+                checkAndCreateClusters();
+                updateMarkerCount();
+                
+                // Adjust view based on remaining markers
+                if (clusterMarkers.length > 0) {
+                    const group = new L.featureGroup(clusterMarkers);
+                    maps.Cluster.fitBounds(group.getBounds(), {
+                        padding: [50, 50],
+                        maxZoom: 12,
+                        animate: true
+                    });
+                } else {
+                    maps.Cluster.setView([37.8, -96], 4);
+                }
+            }
+        }
+
+        function clearClusterMarkers() {
+            // Remove each marker from both the map and cluster group
+            while (clusterMarkers.length > 0) {
+                const marker = clusterMarkers[0];
+                maps.Cluster.removeLayer(marker);
+                if (markerClusterGroup) {
+                    markerClusterGroup.removeLayer(marker);
+                }
+                clusterMarkers.shift(); // Remove the first marker from array
+            }
+
+            // Clear the cluster group
+            if (markerClusterGroup) {
+                markerClusterGroup.clearLayers();
+            }
+
+            // Reset array and update count
+            clusterMarkers = [];
+            updateMarkerCount();
+            
+            // Reset view after clearing with wider zoom
+            maps.Cluster.setView([37.8, -96], );
+        }
+
+        function recenterClusterMap() {
+            if (clusterMarkers.length > 0) {
+                const group = new L.featureGroup(clusterMarkers);
+                maps.Cluster.fitBounds(group.getBounds(), {
+                    padding: [50, 50],    // Add padding around the bounds
+                    maxZoom: 12,          // Limit maximum zoom level
+                    animate: true
+                });
+            } else {
+                maps.Cluster.setView([37.8, -96], 4);
+            }
+        }
+
+        function updateMarkerCount() {
+            const countElement = document.getElementById('markerCount');
+            if (countElement) {
+                countElement.innerHTML = `Markers: ${clusterMarkers.length}`;
+            }
+        }
+
+        let isDestinationMode = false;
+        let isMarkerMode = false;
+        let destinationPins = [];
+        let markerPins = [];
+
+        function initializeLocaterTab() {
+            if (!maps.Locater) return;
+
+            // Add click handlers for the buttons
+            document.getElementById('createDestBtn').addEventListener('click', function() {
+                isDestinationMode = !isDestinationMode;
+                isMarkerMode = false;
+                this.style.backgroundColor = isDestinationMode ? '#90EE90' : '';
+                document.getElementById('createMarkerBtn').style.backgroundColor = '';
+            });
+
+            document.getElementById('createMarkerBtn').addEventListener('click', function() {
+                isMarkerMode = !isMarkerMode;
+                isDestinationMode = false;
+                this.style.backgroundColor = isMarkerMode ? '#90EE90' : '';
+                document.getElementById('createDestBtn').style.backgroundColor = '';
+            });
+
+            // Add click handler for the map
+            maps.Locater.on('click', function(e) {
+                if (isDestinationMode) {
+                    addDestinationPin(e.latlng);
+                } else if (isMarkerMode) {
+                    addMarkerPin(e.latlng);
+                }
+                calculateDistances();
+            });
+
+            // Add recenter button with compass icon
+            const locaterRecenterButton = L.control({position: 'bottomleft'});
+            locaterRecenterButton.onAdd = function() {
+                const div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
+                div.innerHTML = `
+                    <button id="locater-recenter-btn" title="Re-Center Map" style="
+                        width: 34px;
+                        height: 34px;
+                        background: white;
+                        border: 2px solid rgba(0,0,0,0.2);
+                        border-radius: 4px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+                        font-size: 16px;
+                    ">⌖</button>
+                `;
+                div.querySelector('button').onclick = function(e) {
+                    e.stopPropagation();
+                    maps.Locater.setView([37.8, -96], 4);
+                };
+                div.querySelector('button').onmouseover = function() {
+                    this.style.background = '#f4f4f4';
+                };
+                div.querySelector('button').onmouseout = function() {
+                    this.style.background = 'white';
+                };
+                return div;
+            };
+            locaterRecenterButton.addTo(maps.Locater);
+        }
+
+        function addDestinationPin(latlng) {
+            const marker = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'destination-pin',
+                    html: '📍',
+                    iconSize: [25, 25]
+                }),
+                draggable: true  // Make marker draggable
+            }).addTo(maps.Locater);
+            
+            // Create popup content with delete button
+            const popupContent = document.createElement('div');
+            popupContent.innerHTML = `
+                <div>Destination ${destinationPins.length + 1}</div>
+                <button onclick="deleteDestinationPin(${destinationPins.length})" 
+                        style="width: 100%; margin-top: 5px; padding: 2px;">Delete</button>
+            `;
+            marker.bindPopup(popupContent);
+            
+            // Add dragend event listener
+            marker.on('dragend', function() {
+                calculateDistances();
+            });
+            
+            destinationPins.push(marker);
+        }
+
+        function addMarkerPin(latlng) {
+            const marker = L.marker(latlng, {
+                icon: L.divIcon({
+                    className: 'marker-pin',
+                    html: '📌',
+                    iconSize: [25, 25]
+                }),
+                draggable: true  // Make marker draggable
+            }).addTo(maps.Locater);
+            
+            // Create popup content with delete button
+            const popupContent = document.createElement('div');
+            popupContent.innerHTML = `
+                <div>Marker ${markerPins.length + 1}</div>
+                <button onclick="deleteMarkerPin(${markerPins.length})" 
+                        style="width: 100%; margin-top: 5px; padding: 2px;">Delete</button>
+            `;
+            marker.bindPopup(popupContent);
+            
+            // Add dragend event listener
+            marker.on('dragend', function() {
+                calculateDistances();
+            });
+            
+            markerPins.push(marker);
+        }
+
+        // Add these new functions for deleting pins
+        function deleteDestinationPin(index) {
+            if (index >= 0 && index < destinationPins.length) {
+                maps.Locater.removeLayer(destinationPins[index]);
+                destinationPins.splice(index, 1);
+                
+                // Update remaining destination pins' popup content
+                destinationPins.forEach((pin, i) => {
+                    const newPopupContent = document.createElement('div');
+                    newPopupContent.innerHTML = `
+                        <div>Destination ${i + 1}</div>
+                        <button onclick="deleteDestinationPin(${i})" 
+                                style="width: 100%; margin-top: 5px; padding: 2px;">Delete</button>
+                    `;
+                    pin.setPopupContent(newPopupContent);
+                });
+                
+                calculateDistances();
+            }
+        }
+
+        function deleteMarkerPin(index) {
+            if (index >= 0 && index < markerPins.length) {
+                maps.Locater.removeLayer(markerPins[index]);
+                markerPins.splice(index, 1);
+                
+                // Update remaining marker pins' popup content
+                markerPins.forEach((pin, i) => {
+                    const newPopupContent = document.createElement('div');
+                    newPopupContent.innerHTML = `
+                        <div>Marker ${i + 1}</div>
+                        <button onclick="deleteMarkerPin(${i})" 
+                                style="width: 100%; margin-top: 5px; padding: 2px;">Delete</button>
+                    `;
+                    pin.setPopupContent(newPopupContent);
+                });
+                
+                calculateDistances();
+            }
+        }
+
+        // Update the calculateDistances function to handle empty arrays
+        function calculateDistances() {
+            if (destinationPins.length === 0 && markerPins.length === 0) {
+                document.getElementById('distanceInfo').innerHTML = 'Add both destination and marker pins to calculate distances';
+                return;
+            }
+
+            if (destinationPins.length === 0) {
+                document.getElementById('distanceInfo').innerHTML = 'Add destination pins to calculate distances';
+                return;
+            }
+
+            if (markerPins.length === 0) {
+                document.getElementById('distanceInfo').innerHTML = 'Add marker pins to calculate distances';
+                return;
+            }
+
+            let distanceInfo = '';
+            let markerDistances = [];
+
+            // Calculate distances for each marker
+            markerPins.forEach((marker, markerIndex) => {
+                let totalDistance = 0;
+                let individualDistances = [];
+                
+                destinationPins.forEach((dest, destIndex) => {
+                    const distance = marker.getLatLng().distanceTo(dest.getLatLng()) / 1000; // Convert to kilometers
+                    totalDistance += distance;
+                    individualDistances.push({
+                        destination: destIndex + 1,
+                        distance: distance
+                    });
+                });
+                
+                markerDistances.push({
+                    marker: markerIndex + 1,
+                    totalDistance: totalDistance,
+                    individualDistances: individualDistances
+                });
+            });
+
+            // Sort markers by total distance
+            markerDistances.sort((a, b) => a.totalDistance - b.totalDistance);
+
+            // Create the info text
+            distanceInfo = '<strong>Distance Summary:</strong><br>';
+            markerDistances.forEach(item => {
+                distanceInfo += `<br>Marker ${item.marker}:<br>`;
+                distanceInfo += `Total distance: ${item.totalDistance.toFixed(2)} km<br>`;
+                distanceInfo += 'Individual distances:<br>';
+                item.individualDistances.forEach(dist => {
+                    distanceInfo += `- To Destination ${dist.destination}: ${dist.distance.toFixed(2)} km<br>`;
+                });
+            });
+
+            document.getElementById('distanceInfo').innerHTML = distanceInfo;
+        }
+
+        function recenterLocaterMap() {
+            maps.Locater.setView([37.8, -96], 4);
+        }
+
+        function initializeOtherTab() {
+            if (!maps.Other) return;
+            
+            // Add recenter button with compass icon
+            const otherRecenterButton = L.control({position: 'bottomleft'});
+            otherRecenterButton.onAdd = function() {
+                const div = L.DomUtil.create('div', 'leaflet-control leaflet-control-custom');
+                div.innerHTML = `
+                    <button id="other-recenter-btn" title="Re-Center Map" style="
+                        width: 34px;
+                        height: 34px;
+                        background: white;
+                        border: 2px solid rgba(0,0,0,0.2);
+                        border-radius: 4px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+                        font-size: 16px;
+                    ">⌖</button>
+                `;
+                div.querySelector('button').onclick = function(e) {
+                    e.stopPropagation();
+                    maps.Other.setView([37.8, -96], 4);
+                };
+                div.querySelector('button').onmouseover = function() {
+                    this.style.background = '#f4f4f4';
+                };
+                div.querySelector('button').onmouseout = function() {
+                    this.style.background = 'white';
+                };
+                return div;
+            };
+            otherRecenterButton.addTo(maps.Other);
+        }
+    </script>
+</body>
+</html>
